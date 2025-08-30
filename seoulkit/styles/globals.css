@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --rose-100: #FFF5FB;
+  --rose-200: #FFEAF6;
+  --rose-300: #FFC6E9;
+  --rose-500: #FF61C7;
+  --rose-700: #D63A9F;
+  --blue-pastel: #BDE3FF;
+  --choco: #3B2B2F;
+}
+
+html, body, #__next {
+  height: 100%;
+}
+
+body {
+  @apply bg-rose100 text-choco antialiased;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-xl shadow-sm border border-rose200 p-6;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg bg-rose500 text-white px-4 py-2 font-medium hover:bg-rose700 transition;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-lg border border-rose500 text-rose500 px-4 py-2 font-medium hover:bg-rose100 transition;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full bg-bluePastel text-choco px-3 py-1 text-sm;
+  }
+}
+
+
