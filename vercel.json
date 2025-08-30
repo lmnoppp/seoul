@@ -1,6 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/neko-tick", "schedule": "0 * * * *", "timezone": "Europe/Paris" },
+    { "path": "/api/cron/neko-tick", "schedule": "0 9 * * *", "timezone": "Europe/Paris" },
     { "path": "/api/cron/daily-recap", "schedule": "0 20 * * *", "timezone": "Europe/Paris" }
   ]
 }
