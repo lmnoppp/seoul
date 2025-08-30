@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { supabaseBrowser } from '@/lib/supabaseClient'
+import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
 export default function SignupPage() {
   const [email, setEmail] = useState('')
@@ -19,9 +19,21 @@ export default function SignupPage() {
         setError(authError.message)
         return
       }
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (token) {
+          await fetch('/api/me/init', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        }
+      } catch (e) {
+        // ignore
+      }
       setMessage('Inscription réussie. Vérifiez votre email si nécessaire.')
-    } catch (err: any) {
-      setError(err?.message ?? 'Configuration manquante (.env).')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Configuration manquante (.env).')
     }
   }
 
@@ -48,7 +60,7 @@ export default function SignupPage() {
           />
           {error && <p className="text-red-600 text-sm">{error}</p>}
           {message && <p className="text-green-700 text-sm">{message}</p>}
-          <button className="btn w-full" type="submit">S'inscrire</button>
+          <button className="btn w-full" type="submit">S&apos;inscrire</button>
         </form>
       </div>
     </main>

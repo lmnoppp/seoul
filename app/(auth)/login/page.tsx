@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabaseBrowser } from '@/lib/supabaseClient'
+import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -19,9 +19,21 @@ export default function LoginPage() {
         setError(authError.message)
         return
       }
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        const token = sessionData.session?.access_token
+        if (token) {
+          await fetch('/api/me/init', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          })
+        }
+      } catch (e) {
+        // ignore
+      }
       router.push('/onboarding')
-    } catch (err: any) {
-      setError(err?.message ?? 'Configuration manquante (.env).')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Configuration manquante (.env).')
     }
   }
 

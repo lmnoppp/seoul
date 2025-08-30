@@ -4,6 +4,7 @@ const nextConfig = {
     remotePatterns: []
   },
   reactStrictMode: true,
+  outputFileTracingRoot: process.cwd(),
 };
 
 export default nextConfig;

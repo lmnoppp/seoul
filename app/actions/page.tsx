@@ -1,5 +1,5 @@
 'use client'
-import { supabaseBrowser } from '@/lib/supabaseClient'
+import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
 export default function ActionsPage() {
   async function goSleep() {
