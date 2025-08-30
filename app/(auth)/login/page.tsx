@@ -8,6 +8,8 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [needsConfirmation, setNeedsConfirmation] = useState(false)
+  const [resendMsg, setResendMsg] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -17,6 +19,7 @@ export default function LoginPage() {
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) {
         setError(authError.message)
+        setNeedsConfirmation(/email not confirmed/i.test(authError.message))
         return
       }
       try {
@@ -34,6 +37,22 @@ export default function LoginPage() {
       router.push('/onboarding')
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Configuration manquante (.env).')
+    }
+  }
+
+  async function resendConfirmation() {
+    setResendMsg(null)
+    setError(null)
+    try {
+      const supabase = supabaseBrowser()
+      const { data, error: resendError } = await supabase.auth.resend({ type: 'signup', email })
+      if (resendError) {
+        setError(resendError.message)
+      } else {
+        setResendMsg('Email de confirmation renvoyé. Vérifie ta boîte de réception.')
+      }
+    } catch {
+      setError('Impossible de renvoyer l’email pour le moment.')
     }
   }
 
@@ -59,6 +78,14 @@ export default function LoginPage() {
             required
           />
           {error && <p className="text-red-600 text-sm">{error}</p>}
+          {needsConfirmation && (
+            <div className="text-sm space-y-2">
+              <button type="button" className="btn btn-secondary w-full" onClick={resendConfirmation}>
+                Renvoyer l’email de confirmation
+              </button>
+              {resendMsg && <p className="text-green-700">{resendMsg}</p>}
+            </div>
+          )}
           <button className="btn w-full" type="submit">Se connecter</button>
         </form>
       </div>
