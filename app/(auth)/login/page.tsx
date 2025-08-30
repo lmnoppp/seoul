@@ -28,7 +28,7 @@ export default function LoginPage() {
             headers: { Authorization: `Bearer ${token}` },
           })
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
       router.push('/onboarding')

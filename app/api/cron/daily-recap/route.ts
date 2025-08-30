@@ -5,11 +5,11 @@ import { sendEmail } from '@/lib/brevo'
 
 export async function POST(request: NextRequest) {
   try {
-    // Vérifie header x-cron-secret
+    // Autorise Vercel Cron via en-tête 'x-vercel-cron' ou secret custom
+    const isVercelCron = request.headers.has('x-vercel-cron')
     const cronSecret = request.headers.get('x-cron-secret')
     const expectedSecret = process.env.CRON_SECRET
-    
-    if (!expectedSecret || cronSecret !== expectedSecret) {
+    if (!isVercelCron && (!expectedSecret || cronSecret !== expectedSecret)) {
       return NextResponse.json({ error: 'Accès refusé' }, { status: 401 })
     }
 

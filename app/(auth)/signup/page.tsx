@@ -28,7 +28,7 @@ export default function SignupPage() {
             headers: { Authorization: `Bearer ${token}` },
           })
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
       setMessage('Inscription réussie. Vérifiez votre email si nécessaire.')
