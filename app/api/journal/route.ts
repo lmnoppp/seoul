@@ -55,9 +55,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erreur récupération entries', details: entriesError.message || String(entriesError) }, { status: 500 })
     }
 
-    const entries = (rawEntries || []).filter((e: any) => {
+    const entries = (rawEntries || []).filter((e: { author_id?: string; user_id?: string; visibility?: string }) => {
       const author = e.author_id ?? e.user_id
-      return e.visibility === 'shared' || author === userId
+      return e.visibility === 'shared' || (author && author === userId)
     })
 
     return NextResponse.json({ entries })
@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
 
     // Insert dans public.journal_entries
-    const { data: insertedEntry, error: entryError } = await supabaseAdmin()
+    const { error: entryError } = await supabaseAdmin()
       .from('journal_entries')
       .insert({
         id: entryId,
