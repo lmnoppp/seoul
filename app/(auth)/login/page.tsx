@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabaseBrowser } from '@/lib/supabaseBrowser'
 
@@ -8,19 +8,38 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [needsConfirmation, setNeedsConfirmation] = useState(false)
-  const [resendMsg, setResendMsg] = useState<string | null>(null)
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
     try {
+      // Force confirm côté serveur pour éliminer l'erreur "Email not confirmed"
+      await fetch('/api/auth/ensure-confirmed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      })
+
       const supabase = supabaseBrowser()
-      const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+      let { error: authError } = await supabase.auth.signInWithPassword({ email, password })
       if (authError) {
-        setError(authError.message)
-        setNeedsConfirmation(/email not confirmed/i.test(authError.message))
-        return
+        // Si erreur de confirmation → retry après reconfirm serveur
+        if (/email\s*not\s*confirmed/i.test(authError.message || '')) {
+          try {
+            await fetch('/api/auth/ensure-confirmed', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email })
+            })
+            await new Promise((r) => setTimeout(r, 400))
+            const retry = await supabase.auth.signInWithPassword({ email, password })
+            authError = retry.error || null
+          } catch {}
+        }
+        if (authError) {
+          setError(authError.message)
+          return
+        }
       }
       try {
         const { data: sessionData } = await supabase.auth.getSession()
@@ -40,21 +59,23 @@ export default function LoginPage() {
     }
   }
 
-  async function resendConfirmation() {
-    setResendMsg(null)
-    setError(null)
-    try {
-      const supabase = supabaseBrowser()
-      const { data, error: resendError } = await supabase.auth.resend({ type: 'signup', email })
-      if (resendError) {
-        setError(resendError.message)
-      } else {
-        setResendMsg('Email de confirmation renvoyé. Vérifie ta boîte de réception.')
+  // Hook: si l'utilisateur est déjà connecté (SIGNED_IN), init profil automatiquement
+  useEffect(() => {
+    const supabase = supabaseBrowser()
+    const { data: sub } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session?.access_token) {
+        try {
+          await fetch('/api/me/init', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          })
+        } catch {}
       }
-    } catch {
-      setError('Impossible de renvoyer l’email pour le moment.')
+    })
+    return () => {
+      sub.subscription.unsubscribe()
     }
-  }
+  }, [])
 
   return (
     <main className="min-h-screen p-6">
@@ -78,14 +99,6 @@ export default function LoginPage() {
             required
           />
           {error && <p className="text-red-600 text-sm">{error}</p>}
-          {needsConfirmation && (
-            <div className="text-sm space-y-2">
-              <button type="button" className="btn btn-secondary w-full" onClick={resendConfirmation}>
-                Renvoyer l’email de confirmation
-              </button>
-              {resendMsg && <p className="text-green-700">{resendMsg}</p>}
-            </div>
-          )}
           <button className="btn w-full" type="submit">Se connecter</button>
         </form>
       </div>
