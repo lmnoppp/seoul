@@ -33,23 +33,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ entries: [] })
     }
 
+    // Pour compatibilité de schémas (author_id vs user_id), on récupère tout pour le couple
     let query = supabaseAdmin()
       .from('journal_entries')
-      .select(`
-        id,
-        content_text,
-        moods,
-        visibility,
-        created_at,
-        user_id,
-        journal_photos (
-          id,
-          file_path,
-          file_name
-        )
-      `)
+      .select(`*, journal_photos (*)`)
       .eq('couple_id', coupleData.id)
-      .or(`visibility.eq.shared,user_id.eq.${userId}`)
       .order('created_at', { ascending: false })
 
     if (day) {
@@ -60,14 +48,19 @@ export async function GET(request: NextRequest) {
         .lte('created_at', endOfDay)
     }
 
-    const { data: entries, error: entriesError } = await query
+    const { data: rawEntries, error: entriesError } = await query
 
     if (entriesError) {
       console.error('Erreur récupération entries:', entriesError)
-      return NextResponse.json({ error: 'Erreur récupération entries' }, { status: 500 })
+      return NextResponse.json({ error: 'Erreur récupération entries', details: entriesError.message || String(entriesError) }, { status: 500 })
     }
 
-    return NextResponse.json({ entries: entries || [] })
+    const entries = (rawEntries || []).filter((e: any) => {
+      const author = e.author_id ?? e.user_id
+      return e.visibility === 'shared' || author === userId
+    })
+
+    return NextResponse.json({ entries })
   } catch (error) {
     console.error('Erreur GET /api/journal:', error)
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 })
@@ -137,7 +130,7 @@ export async function POST(request: NextRequest) {
       .insert({
         id: entryId,
         couple_id: coupleId,
-        user_id: userId,
+        author_id: userId,
         content_text: typeof content_text === 'string' ? content_text : '',
         moods: validMoods,
         visibility: validVisibility,
@@ -197,7 +190,7 @@ export async function POST(request: NextRequest) {
         await supabaseAdmin()
           .from('journal_photos')
           .insert({
-            journal_entry_id: entryId,
+            entry_id: entryId,
             file_path: storagePath,
             file_name: safeFileName,
           })
