@@ -94,6 +94,8 @@ export async function POST(request: NextRequest) {
     // Parse request body
     const body = await request.json()
     const { content_text, moods = [], visibility = 'private', photos = [] } = body
+    const validMoods: string[] = Array.isArray(moods) ? moods.map((m: unknown) => String(m)).slice(0, 10) : []
+    const validVisibility: 'private' | 'shared' = visibility === 'shared' ? 'shared' : 'private'
 
     // Limite de taille totale des uploads base64
     const maxUploadMb = Number(process.env.MAX_UPLOAD_MB || 10)
@@ -101,9 +103,9 @@ export async function POST(request: NextRequest) {
     let totalBytes = 0
     if (Array.isArray(photos)) {
       for (const p of photos) {
-        const base64: unknown = p?.file_data
-        if (typeof base64 === 'string' && base64.length > 0) {
-          const payload = base64.includes(',') ? base64.split(',')[1] : base64
+        const candidate: unknown = (p?.file_data ?? p?.base64)
+        if (typeof candidate === 'string' && candidate.length > 0) {
+          const payload = candidate.includes(',') ? candidate.split(',')[1] : candidate
           try {
             totalBytes += Buffer.from(payload, 'base64').length
           } catch {}
@@ -130,21 +132,23 @@ export async function POST(request: NextRequest) {
     const now = new Date().toISOString()
 
     // Insert dans public.journal_entries
-    const { error: entryError } = await supabaseAdmin()
+    const { data: insertedEntry, error: entryError } = await supabaseAdmin()
       .from('journal_entries')
       .insert({
         id: entryId,
         couple_id: coupleId,
         user_id: userId,
-        content_text: content_text || '',
-        moods: moods,
-        visibility: visibility,
-        created_at: now
+        content_text: typeof content_text === 'string' ? content_text : '',
+        moods: validMoods,
+        visibility: validVisibility,
+        created_at: now,
       })
+      .select('id')
+      .single()
 
     if (entryError) {
       console.error('Erreur insertion entry:', entryError)
-      return NextResponse.json({ error: 'Erreur création entry' }, { status: 500 })
+      return NextResponse.json({ error: 'Erreur création entry', details: entryError.message || String(entryError) }, { status: 500 })
     }
 
     // Upload photos → Supabase storage 'journal/{YYYY}/{MM}/{entryId}/{filename}'
@@ -153,44 +157,58 @@ export async function POST(request: NextRequest) {
     const month = (currentDate.getMonth() + 1).toString().padStart(2, '0')
     
     for (const photo of photos) {
-      const { file_name, file_data } = photo // On assume que file_data est en base64
-      
-      if (file_name && file_data) {
-        const storagePath = `journal/${year}/${month}/${entryId}/${file_name}`
-        
-        try {
-          // Convert base64 to buffer
-          const buffer = Buffer.from(file_data.split(',')[1] || file_data, 'base64')
-          
-          const { error: uploadError } = await supabaseAdmin()
-            .storage
-            .from('journal')
-            .upload(storagePath, buffer, {
-              contentType: photo.content_type || 'image/jpeg'
-            })
+      const fileNameRaw: unknown = photo?.file_name ?? photo?.name
+      const base64Raw: unknown = photo?.file_data ?? photo?.base64
+      if (typeof fileNameRaw !== 'string' || typeof base64Raw !== 'string') continue
 
-          if (uploadError) {
-            console.error('Erreur upload photo:', uploadError)
-            continue // Continue avec les autres photos
-          }
+      const safeFileName = fileNameRaw
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/_{2,}/g, '_')
+        .slice(0, 128)
 
-          // Insert dans public.journal_photos
-          await supabaseAdmin()
-            .from('journal_photos')
-            .insert({
-              journal_entry_id: entryId,
-              file_path: storagePath,
-              file_name: file_name
-            })
-        } catch (photoError) {
-          console.error('Erreur traitement photo:', photoError)
+      const storagePath = `journal/${year}/${month}/${entryId}/${safeFileName}`
+
+      try {
+        const [maybeHeader, payloadMaybe] = base64Raw.split(',')
+        const payload = payloadMaybe ? payloadMaybe : base64Raw
+        const buffer = Buffer.from(payload, 'base64')
+
+        let contentType: string | undefined
+        if (payloadMaybe && typeof maybeHeader === 'string' && maybeHeader.startsWith('data:')) {
+          const match = /data:([^;]+);base64/.exec(maybeHeader)
+          contentType = match?.[1]
+        }
+        if (!contentType) {
+          contentType = (photo?.content_type as string) || 'image/jpeg'
+        }
+
+        const { error: uploadError } = await supabaseAdmin()
+          .storage
+          .from('journal')
+          .upload(storagePath, buffer, {
+            contentType,
+          })
+
+        if (uploadError) {
+          console.error('Erreur upload photo:', uploadError)
           continue
         }
+
+        await supabaseAdmin()
+          .from('journal_photos')
+          .insert({
+            journal_entry_id: entryId,
+            file_path: storagePath,
+            file_name: safeFileName,
+          })
+      } catch (photoError) {
+        console.error('Erreur traitement photo:', photoError)
+        continue
       }
     }
 
     // Si visibility=shared → sendEmail(partnerEmail, sujet, html)
-    if (visibility === 'shared') {
+    if (validVisibility === 'shared') {
       const partnerId = coupleData.user_a === userId ? coupleData.user_b : coupleData.user_a
       
       const { data: partnerData } = await supabaseAdmin()
